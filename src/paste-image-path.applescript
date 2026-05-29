@@ -7,6 +7,8 @@ use scripting additions
 set save_dir to "~/Desktop"
 
 set image_extensions to {"png", "jpg", "jpeg", "webp", "gif", "tiff", "tif", "heic"}
+set short_paste_delay to 0.05
+set long_paste_delay to 0.2
 
 -- Expand "~" manually because AppleScript does not expand it automatically.
 if save_dir starts with "~/" then
@@ -22,6 +24,13 @@ end if
 -- Make sure the target folder exists.
 do shell script "mkdir -p " & quoted form of save_dir
 
+-- Paste the current clipboard content into the focused app.
+on pasteClipboard()
+    tell application "System Events"
+        keystroke "v" using command down
+    end tell
+end pasteClipboard
+
 -- Check whether a path points to an existing image file.
 on isValidImagePath(file_path, image_extensions)
     try
@@ -34,15 +43,6 @@ on isValidImagePath(file_path, image_extensions)
         return false
     end try
 end isValidImagePath
-
--- Return the first saved file that matches the given content hash.
-on findExistingHashedImage(save_dir, image_hash)
-    try
-        return do shell script "find " & quoted form of save_dir & " -maxdepth 1 -type f -name '*-" & image_hash & ".png' -print -quit"
-    on error
-        return ""
-    end try
-end findExistingHashedImage
 
 -- Normalize a text or file URL path.
 on normalizePath(file_path)
@@ -67,11 +67,14 @@ try
     set clipboard_text to normalizePath(clipboard_text)
 
     if isValidImagePath(clipboard_text, image_extensions) then
-        return clipboard_text
+        set the clipboard to clipboard_text
+        delay short_paste_delay
+        pasteClipboard()
+        return ""
     end if
 end try
 
--- 2. If Finder copied an image file, read the file URL from the pasteboard and return its path.
+-- 2. If Finder copied an image file, read the file URL from the pasteboard and paste its path.
 set pasteboard to current application's NSPasteboard's generalPasteboard()
 set file_urls to pasteboard's readObjectsForClasses:{current application's NSURL} options:(missing value)
 
@@ -81,11 +84,14 @@ if file_urls is not missing value and (file_urls's |count|()) > 0 then
     set copied_file_path to normalizePath(copied_file_path)
 
     if isValidImagePath(copied_file_path, image_extensions) then
-        return copied_file_path
+        set the clipboard to copied_file_path
+        delay short_paste_delay
+        pasteClipboard()
+        return ""
     end if
 end if
 
--- 3. If clipboard contains raw image data, save it as a PNG file only when needed.
+-- 3. If clipboard contains raw image data, save it as a new PNG file.
 set clipboard_image to current application's NSImage's alloc()'s initWithPasteboard:pasteboard
 
 if clipboard_image is missing value then
@@ -93,37 +99,23 @@ if clipboard_image is missing value then
     return ""
 end if
 
+set timestamp to do shell script "date +%Y-%m-%d-%H-%M-%S"
+set file_name to "image-" & timestamp & ".png"
+set file_path to save_dir & "/" & file_name
+
 set tiff_data to clipboard_image's TIFFRepresentation()
 set bitmap_rep to current application's NSBitmapImageRep's imageRepWithData:tiff_data
 set png_data to bitmap_rep's representationUsingType:(current application's NSBitmapImageFileTypePNG) |properties|:(current application's NSDictionary's dictionary())
 
--- Write PNG data to a temporary file so we can calculate a stable hash before choosing the final path.
-set temp_path to do shell script "mktemp /tmp/alfred-paste-image-path.XXXXXX.png"
-set temp_save_result to png_data's writeToFile:temp_path atomically:true
-
-if temp_save_result as boolean is false then
-    display dialog "Failed to prepare image data." buttons {"OK"} default button "OK" with icon stop
-    return ""
-end if
-
-set image_hash to do shell script "shasum -a 256 " & quoted form of temp_path & " | awk '{print $1}'"
-set existing_file_path to findExistingHashedImage(save_dir, image_hash)
-
-if existing_file_path is not "" then
-    do shell script "rm -f " & quoted form of temp_path
-    return existing_file_path
-end if
-
-set timestamp to do shell script "date +%Y-%m-%d-%H-%M-%S"
-set file_name to "image-" & timestamp & "-" & image_hash & ".png"
-set file_path to save_dir & "/" & file_name
-
 set save_result to png_data's writeToFile:file_path atomically:true
-do shell script "rm -f " & quoted form of temp_path
 
 if save_result as boolean is false then
     display dialog "Failed to save image." buttons {"OK"} default button "OK" with icon stop
     return ""
 end if
 
-return file_path
+set the clipboard to file_path
+delay long_paste_delay
+pasteClipboard()
+
+return ""
