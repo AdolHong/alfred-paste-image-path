@@ -35,13 +35,6 @@ The workflow will:
 3. Copy the saved file path to the clipboard.
 4. Paste the file path into the current app.
 
-# Permissions
-
-Alfred needs Accessibility permission to paste the path into the current app:
-
-```text
-System Settings -> Privacy & Security -> Accessibility -> Alfred
-```
 
 # License
 
