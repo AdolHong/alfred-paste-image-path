@@ -4,6 +4,8 @@ Save clipboard image to a configurable path, then paste the saved file path as t
 
 Useful for terminal-based AI tools like Codex CLI and Claude Code, so you can paste images as file paths.
 
+Repeated triggers will paste the existing PNG path again without showing an error popup.
+
 # Usage
 
 Make sure you have installed Alfred locally. After downloading the [workflow file](./Paste-image-to-path.alfredworkflow), double click to complete the installation.
